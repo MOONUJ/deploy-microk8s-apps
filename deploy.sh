@@ -50,15 +50,30 @@ terraform_apply() {
 }
 
 ensure_dependencies() {
-  echo "==> Installing Ansible collection dependencies..."
+  echo "==> Checking dependencies..."
   cd "$ANSIBLE_DIR"
-  ansible-galaxy collection install -r requirements.yml --force-with-deps
-  if ! python3 -c "import kubernetes" 2>/dev/null; then
-    echo "==> Installing Python kubernetes client..."
+
+  # Ansible collection: kubernetes.core
+  if ansible-galaxy collection list kubernetes.core 2>/dev/null | grep -q 'kubernetes.core'; then
+    echo "    kubernetes.core collection already installed, skipping."
+  else
+    echo "    Installing Ansible collection dependencies..."
+    ansible-galaxy collection install -r requirements.yml
+  fi
+
+  # Python kubernetes client
+  if python3 -c "import kubernetes" 2>/dev/null; then
+    echo "    Python kubernetes client already installed, skipping."
+  else
+    echo "    Installing Python kubernetes client..."
     pip install kubernetes
   fi
-  if ! command -v helm &>/dev/null; then
-    echo "==> Installing Helm CLI..."
+
+  # Helm CLI
+  if command -v helm &>/dev/null; then
+    echo "    Helm CLI already installed, skipping."
+  else
+    echo "    Installing Helm CLI..."
     brew install helm
   fi
 }

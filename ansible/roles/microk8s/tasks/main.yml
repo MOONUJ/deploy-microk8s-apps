@@ -7,46 +7,72 @@
     state: present
     update_cache: true
 
+- name: Check if MicroK8s is installed
+  ansible.builtin.command: snap list microk8s
+  register: microk8s_snap_check
+  changed_when: false
+  failed_when: false
+
 - name: Install MicroK8s via snap
   community.general.snap:
     name: microk8s
     classic: true
     channel: "{{ microk8s_channel }}"
+  when: microk8s_snap_check.rc != 0
 
 - name: Add user to microk8s group
   ansible.builtin.user:
     name: "{{ microk8s_user }}"
     groups: microk8s
     append: true
-  notify: restart microk8s
+
+- name: Check if MicroK8s is running
+  ansible.builtin.command: microk8s status
+  register: microk8s_running_check
+  changed_when: false
+  failed_when: false
+
+- name: Start MicroK8s if not running
+  ansible.builtin.command: microk8s start
+  when: "'microk8s is not running' in microk8s_running_check.stdout"
 
 - name: Wait for MicroK8s to be ready
-  ansible.builtin.command: microk8s status --wait-ready
+  ansible.builtin.command: microk8s status
   changed_when: false
   register: microk8s_status
-  retries: 5
-  delay: 10
-  until: microk8s_status.rc == 0
+  retries: 12
+  delay: 15
+  until: "'microk8s is running' in microk8s_status.stdout"
 
-- name: Enable MicroK8s addons
+- name: Get current MicroK8s addon status
+  ansible.builtin.command: microk8s status --format short
+  register: microk8s_addon_status
+  changed_when: false
+
+- name: Enable MicroK8s addons (only if not already enabled)
   ansible.builtin.command: "microk8s enable {{ item }}"
   loop: "{{ microk8s_addons }}"
   register: addon_result
-  changed_when: "'Enabling' in addon_result.stdout or 'enabled' in addon_result.stdout"
+  changed_when: "'Enabling' in addon_result.stdout"
+  when: "microk8s_addon_status.stdout is not search('core/' + item + ': enabled')"
 
 - name: Disable MicroK8s MetalLB addon (replaced by Helm)
   ansible.builtin.command: microk8s disable metallb
   register: metallb_disable_result
-  changed_when: "'Disabling' in metallb_disable_result.stdout or 'disabled' in metallb_disable_result.stdout"
+  changed_when: "'Disabling' in metallb_disable_result.stdout"
   failed_when: false
-  when: enable_metallb | bool
+  when:
+    - enable_metallb | bool
+    - microk8s_addon_status.stdout is search('core/metallb: enabled')
 
 - name: Disable MicroK8s Ingress addon (replaced by Helm)
   ansible.builtin.command: microk8s disable ingress
   register: ingress_disable_result
-  changed_when: "'Disabling' in ingress_disable_result.stdout or 'disabled' in ingress_disable_result.stdout"
+  changed_when: "'Disabling' in ingress_disable_result.stdout"
   failed_when: false
-  when: enable_ingress | bool
+  when:
+    - enable_ingress | bool
+    - microk8s_addon_status.stdout is search('core/ingress: enabled')
 
 - name: Create kubectl alias
   ansible.builtin.command: snap alias microk8s.kubectl kubectl
@@ -54,10 +80,12 @@
   failed_when: false
 
 - name: Wait for MicroK8s to be ready after addons
-  ansible.builtin.command: microk8s status --wait-ready
+  ansible.builtin.command: microk8s status
   changed_when: false
-  retries: 5
+  register: microk8s_status_after
+  retries: 12
   delay: 10
+  until: "'microk8s is running' in microk8s_status_after.stdout"
 
 - name: Extract kubeconfig from MicroK8s
   ansible.builtin.command: microk8s config

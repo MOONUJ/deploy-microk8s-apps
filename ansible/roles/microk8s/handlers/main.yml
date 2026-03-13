@@ -1,4 +1,3 @@
 ---
-- name: restart microk8s
-  ansible.builtin.command: microk8s stop && microk8s start
-  listen: restart microk8s
+# Handlers intentionally left empty.
+# MicroK8s start/stop is handled explicitly in tasks.

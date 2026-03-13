@@ -78,6 +78,10 @@ write_files:
                 via: ${var.gateway}
             nameservers:
               addresses: [${join(", ", var.dns_servers)}]
+growpart:
+  mode: auto
+  devices: ['/']
+resize_rootfs: true
 runcmd:
   - rm -f /etc/netplan/50-cloud-init.yaml
   - netplan apply
@@ -106,6 +110,12 @@ resource "vsphere_virtual_machine" "k0s" {
 
   network_interface {
     network_id = data.vsphere_network.network.id
+  }
+
+  disk {
+    label            = "disk0"
+    size             = var.disk_size
+    thin_provisioned = true
   }
 
   ovf_deploy {
