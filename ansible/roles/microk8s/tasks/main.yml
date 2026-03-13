@@ -1,0 +1,73 @@
+---
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - snapd
+      - nfs-common
+    state: present
+    update_cache: true
+
+- name: Install MicroK8s via snap
+  community.general.snap:
+    name: microk8s
+    classic: true
+    channel: "{{ microk8s_channel }}"
+
+- name: Add user to microk8s group
+  ansible.builtin.user:
+    name: "{{ microk8s_user }}"
+    groups: microk8s
+    append: true
+  notify: restart microk8s
+
+- name: Wait for MicroK8s to be ready
+  ansible.builtin.command: microk8s status --wait-ready
+  changed_when: false
+  register: microk8s_status
+  retries: 5
+  delay: 10
+  until: microk8s_status.rc == 0
+
+- name: Enable MicroK8s addons
+  ansible.builtin.command: "microk8s enable {{ item }}"
+  loop: "{{ microk8s_addons }}"
+  register: addon_result
+  changed_when: "'Enabling' in addon_result.stdout or 'enabled' in addon_result.stdout"
+
+- name: Disable MicroK8s MetalLB addon (replaced by Helm)
+  ansible.builtin.command: microk8s disable metallb
+  register: metallb_disable_result
+  changed_when: "'Disabling' in metallb_disable_result.stdout or 'disabled' in metallb_disable_result.stdout"
+  failed_when: false
+  when: enable_metallb | bool
+
+- name: Disable MicroK8s Ingress addon (replaced by Helm)
+  ansible.builtin.command: microk8s disable ingress
+  register: ingress_disable_result
+  changed_when: "'Disabling' in ingress_disable_result.stdout or 'disabled' in ingress_disable_result.stdout"
+  failed_when: false
+  when: enable_ingress | bool
+
+- name: Create kubectl alias
+  ansible.builtin.command: snap alias microk8s.kubectl kubectl
+  changed_when: false
+  failed_when: false
+
+- name: Wait for MicroK8s to be ready after addons
+  ansible.builtin.command: microk8s status --wait-ready
+  changed_when: false
+  retries: 5
+  delay: 10
+
+- name: Extract kubeconfig from MicroK8s
+  ansible.builtin.command: microk8s config
+  register: microk8s_kubeconfig
+  changed_when: false
+
+- name: Save kubeconfig to local machine
+  ansible.builtin.copy:
+    content: "{{ microk8s_kubeconfig.stdout }}"
+    dest: "{{ kubeconfig_local_path }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false

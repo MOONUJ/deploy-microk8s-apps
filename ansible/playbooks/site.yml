@@ -1,0 +1,20 @@
+---
+- name: Install MicroK8s
+  hosts: microk8s
+  become: true
+  roles:
+    - microk8s
+
+- name: Deploy K8s infrastructure and ArgoCD
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  roles:
+    - helm-apps
+
+- name: Deploy docker-compose apps
+  hosts: microk8s
+  become: true
+  roles:
+    - docker-apps

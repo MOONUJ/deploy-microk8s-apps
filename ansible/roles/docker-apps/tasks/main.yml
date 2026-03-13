@@ -1,0 +1,75 @@
+---
+- name: Install Docker prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Add Docker GPG key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Install Docker and compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Ensure Docker service is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Set vm.max_map_count for SonarQube
+  ansible.posix.sysctl:
+    name: vm.max_map_count
+    value: "524288"
+    sysctl_set: true
+    state: present
+    reload: true
+  when: deploy_apps | length == 0 or 'sonarqube' in deploy_apps
+
+- name: Create app directories
+  ansible.builtin.file:
+    path: "{{ docker_apps_base_dir }}/{{ item.name }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ docker_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: deploy_apps | length == 0 or item.name in deploy_apps
+
+- name: Deploy docker-compose files
+  ansible.builtin.template:
+    src: "{{ item.template }}"
+    dest: "{{ docker_apps_base_dir }}/{{ item.name }}/docker-compose.yml"
+    mode: "0644"
+  loop: "{{ docker_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: deploy_apps | length == 0 or item.name in deploy_apps
+  register: compose_files
+
+- name: Start docker-compose services
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ docker_apps_base_dir }}/{{ item.item.name }}"
+  loop: "{{ compose_files.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item is not skipped
+  changed_when: true

@@ -1,0 +1,27 @@
+---
+docker_apps_base_dir: "/opt"
+
+docker_apps:
+  - { name: nexus, template: nexus-compose.yml.j2 }
+  - { name: sonarqube, template: sonarqube-compose.yml.j2 }
+  - { name: keycloak, template: keycloak-compose.yml.j2 }
+  - { name: n8n, template: n8n-compose.yml.j2 }
+
+# Nexus
+nexus_image_tag: "latest"
+nexus_port: 8081
+
+# SonarQube
+sonarqube_image_tag: "community"
+sonarqube_port: 9000
+sonarqube_db_password: "changeme"
+
+# Keycloak
+keycloak_image_tag: "latest"
+keycloak_port: 8080
+keycloak_admin_user: "admin"
+keycloak_admin_password: "changeme"
+
+# n8n
+n8n_image_tag: "latest"
+n8n_port: 5678

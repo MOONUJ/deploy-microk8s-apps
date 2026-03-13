@@ -1,0 +1,32 @@
+# vSphere Connection
+vsphere_user     = "administrator@vsphere.local"
+vsphere_password = "VMware123!VMware123!"
+vsphere_server   = "vc-mgmt.gooddi.lab"
+
+# Infrastructure
+datacenter = "dtx-mgmt-dc01"
+datastore  = "dtx-mgmt-cl01-ds-nfs01"
+cluster    = "dtx-mgmt-cl01"
+network    = "dtx-mgmt-cl01-vds01-pg-vm-mgmt"
+
+# OVA
+ova_path = "/path/to/noble-server-cloudimg-amd64.ova"
+
+# VM Spec
+vm_name_prefix = "k0s-node"
+vm_count       = 3
+num_cpus       = 2
+memory         = 4096
+disk_size      = 40
+
+# User
+vm_user        = "ubuntu"
+vm_password    = ""
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
+
+# Network
+vm_ips      = ["10.0.0.11", "10.0.0.12", "10.0.0.13"]
+gateway     = "10.0.0.1"
+dns_servers = ["8.8.8.8", "8.8.4.4"]
+netmask     = "24"
+vm_domain   = "gooddi.lab"

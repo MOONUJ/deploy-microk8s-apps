@@ -1,0 +1,201 @@
+---
+- name: Add NFS CSI driver Helm repository
+  kubernetes.core.helm_repository:
+    name: csi-driver-nfs
+    repo_url: "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts"
+  when: storage_type == "nfs"
+
+- name: Install NFS CSI driver
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_local_path }}"
+    name: csi-driver-nfs
+    chart_ref: csi-driver-nfs/csi-driver-nfs
+    release_namespace: kube-system
+    wait: true
+    timeout: "{{ helm_timeout }}"
+    values:
+      kubeletDir: /var/snap/microk8s/common/var/lib/kubelet
+  when: storage_type == "nfs"
+
+- name: Create NFS StorageClass
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_local_path }}"
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: "{{ nfs_storage_class_name }}"
+      provisioner: nfs.csi.k8s.io
+      parameters:
+        server: "{{ nfs_server }}"
+        share: "{{ nfs_share_path }}"
+      reclaimPolicy: Retain
+      volumeBindingMode: Immediate
+      mountOptions:
+        - nfsvers=4.1
+  when: storage_type == "nfs"
+
+- name: Add MetalLB Helm repository
+  kubernetes.core.helm_repository:
+    name: metallb
+    repo_url: "https://metallb.github.io/metallb"
+  when: enable_metallb | bool
+
+- name: Get existing MetalLB CRDs
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_local_path }}
+    get crds -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
+  register: existing_crds
+  changed_when: false
+  when: enable_metallb | bool
+
+- name: Adopt orphaned MetalLB CRDs for Helm
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_local_path }}
+    annotate crd {{ item }}
+    meta.helm.sh/release-name=metallb
+    meta.helm.sh/release-namespace=metallb-system
+    --overwrite
+  loop: "{{ existing_crds.stdout_lines | default([]) | select('search', 'metallb') | list }}"
+  changed_when: true
+  when: enable_metallb | bool
+
+- name: Label orphaned MetalLB CRDs as Helm-managed
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_local_path }}
+    label crd {{ item }}
+    app.kubernetes.io/managed-by=Helm
+    --overwrite
+  loop: "{{ existing_crds.stdout_lines | default([]) | select('search', 'metallb') | list }}"
+  changed_when: true
+  when: enable_metallb | bool
+
+- name: Install MetalLB
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_local_path }}"
+    name: metallb
+    chart_ref: metallb/metallb
+    release_namespace: metallb-system
+    create_namespace: true
+    wait: true
+    timeout: "{{ helm_timeout }}"
+  when: enable_metallb | bool
+
+- name: Wait for MetalLB controller to be ready
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_local_path }}
+    wait --for=condition=ready pod
+    -l app.kubernetes.io/component=controller
+    -n metallb-system
+    --timeout=120s
+  changed_when: false
+  when: enable_metallb | bool
+
+- name: Configure MetalLB IPAddressPool
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_local_path }}"
+    state: present
+    definition:
+      apiVersion: metallb.io/v1beta1
+      kind: IPAddressPool
+      metadata:
+        name: default-pool
+        namespace: metallb-system
+      spec:
+        addresses:
+          - "{{ metallb_ip_range }}"
+  when: enable_metallb | bool
+
+- name: Configure MetalLB L2Advertisement
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_local_path }}"
+    state: present
+    definition:
+      apiVersion: metallb.io/v1beta1
+      kind: L2Advertisement
+      metadata:
+        name: default
+        namespace: metallb-system
+      spec:
+        ipAddressPools:
+          - default-pool
+  when: enable_metallb | bool
+
+- name: Add Ingress-NGINX Helm repository
+  kubernetes.core.helm_repository:
+    name: ingress-nginx
+    repo_url: "https://kubernetes.github.io/ingress-nginx"
+  when: enable_ingress | bool
+
+- name: Install Ingress-NGINX controller
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_local_path }}"
+    name: ingress-nginx
+    chart_ref: ingress-nginx/ingress-nginx
+    release_namespace: ingress-nginx
+    create_namespace: true
+    wait: true
+    timeout: "{{ helm_timeout }}"
+    values:
+      controller:
+        service:
+          type: LoadBalancer
+  when: enable_ingress | bool
+
+- name: Add Helm repositories
+  kubernetes.core.helm_repository:
+    name: "{{ item.repo_name }}"
+    repo_url: "{{ item.repo_url }}"
+  loop: "{{ helm_apps }}"
+  loop_control:
+    label: "{{ item.repo_name }}"
+  when: item.repo_url | length > 0
+
+- name: Create namespaces
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_local_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ item.namespace }}"
+  loop: "{{ helm_apps }}"
+  loop_control:
+    label: "{{ item.namespace }}"
+  when: deploy_apps | length == 0 or item.name in deploy_apps
+
+- name: Generate Helm values files
+  ansible.builtin.template:
+    src: "{{ item.values_template }}"
+    dest: "/tmp/{{ item.name }}-values.yml"
+    mode: "0644"
+  loop: "{{ helm_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: deploy_apps | length == 0 or item.name in deploy_apps
+
+- name: Install/Upgrade Helm charts
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_local_path }}"
+    name: "{{ item.name }}"
+    chart_ref: "{{ item.chart }}"
+    release_namespace: "{{ item.namespace }}"
+    values_files:
+      - "/tmp/{{ item.name }}-values.yml"
+    wait: true
+    timeout: "{{ helm_timeout }}"
+  loop: "{{ helm_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: deploy_apps | length == 0 or item.name in deploy_apps
+
+- name: Clean up temporary values files
+  ansible.builtin.file:
+    path: "/tmp/{{ item.name }}-values.yml"
+    state: absent
+  loop: "{{ helm_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: deploy_apps | length == 0 or item.name in deploy_apps

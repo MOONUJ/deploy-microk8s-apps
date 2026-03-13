@@ -1,0 +1,36 @@
+---
+# kubeconfig 경로
+kubeconfig_local_path: "{{ playbook_dir }}/../kubeconfig"
+
+# 배포할 앱 필터 (빈 리스트 = 전체 배포)
+# 사용법: -e "deploy_apps=['nexus','argocd']"
+deploy_apps: []
+
+helm_apps:
+  - name: argocd
+    repo_name: argo
+    repo_url: "https://argoproj.github.io/argo-helm"
+    chart: argo/argo-cd
+    namespace: "{{ app_namespaces.argocd }}"
+    values_template: argocd-values.yml.j2
+    tags:
+      - argocd
+
+# Storage 설정
+storage_type: "hostpath"
+nfs_server: ""
+nfs_share_path: "/export/k8s"
+nfs_storage_class_name: "nfs-csi"
+
+# ArgoCD 설정
+argocd_server_service_type: "ClusterIP"
+argocd_server_insecure: true
+
+# MetalLB 설정
+enable_metallb: false
+metallb_ip_range: ""
+
+# Ingress 설정
+ingress_domain: "example.local"
+enable_ingress: false
+argocd_ingress_host: "argocd.{{ ingress_domain }}"

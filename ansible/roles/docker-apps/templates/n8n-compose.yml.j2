@@ -1,0 +1,13 @@
+---
+services:
+  n8n:
+    image: n8nio/n8n:{{ n8n_image_tag }}
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "{{ n8n_port }}:5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+
+volumes:
+  n8n-data:

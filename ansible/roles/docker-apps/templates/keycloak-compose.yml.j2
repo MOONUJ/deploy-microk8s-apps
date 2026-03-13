@@ -1,0 +1,17 @@
+---
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:{{ keycloak_image_tag }}
+    container_name: keycloak
+    restart: unless-stopped
+    command: start-dev
+    ports:
+      - "{{ keycloak_port }}:8080"
+    environment:
+      KEYCLOAK_ADMIN: "{{ keycloak_admin_user }}"
+      KEYCLOAK_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+
+volumes:
+  keycloak-data:

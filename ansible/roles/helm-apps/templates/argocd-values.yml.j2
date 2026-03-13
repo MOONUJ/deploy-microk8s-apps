@@ -1,0 +1,17 @@
+---
+server:
+  service:
+    type: {{ argocd_server_service_type }}
+  extraArgs:
+{% if argocd_server_insecure %}
+    - --insecure
+{% endif %}
+
+  ingress:
+{% if enable_ingress | bool %}
+    enabled: true
+    ingressClassName: nginx
+    hostname: {{ argocd_ingress_host }}
+{% else %}
+    enabled: false
+{% endif %}

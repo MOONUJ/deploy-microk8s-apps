@@ -1,0 +1,43 @@
+---
+# MicroK8s 설정
+microk8s_channel: "1.28/stable"
+microk8s_user: "{{ ansible_user }}"
+microk8s_addons:
+  - dns
+  - storage
+  - helm3
+  - rbac
+
+# K8s 네임스페이스 설정
+app_namespaces:
+  argocd: argocd
+
+# Helm 공통 설정
+helm_timeout: "600s"
+
+# Storage 설정
+storage_type: "nfs"  # hostpath 또는 nfs
+nfs_server: "10.100.64.96"
+nfs_share_path: "/ssd/nfs"
+nfs_storage_class_name: "nfs-csi"
+
+# MetalLB 설정
+enable_metallb: true
+metallb_ip_range: "10.100.64.174-10.100.64.179"
+
+# Ingress 설정
+ingress_domain: "gooddi.lab"
+enable_ingress: true
+argocd_ingress_host: "argocd.{{ ingress_domain }}"
+
+# kubeconfig 경로
+kubeconfig_local_path: "{{ playbook_dir }}/../kubeconfig"
+
+# Docker-Compose 앱 설정
+nexus_port: 8081
+sonarqube_port: 9000
+sonarqube_db_password: "changeme"
+keycloak_port: 8080
+keycloak_admin_user: "admin"
+keycloak_admin_password: "changeme"
+n8n_port: 5678
