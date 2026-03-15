@@ -12,11 +12,13 @@ docker_apps:
 # Nexus
 nexus_image_tag: "latest"
 nexus_port: 8081
+nexus_admin_password: "changeme"
 
 # SonarQube
 sonarqube_image_tag: "community"
 sonarqube_port: 9000
 sonarqube_db_password: "changeme"
+sonarqube_admin_password: "changeme"
 
 # Keycloak
 keycloak_image_tag: "latest"
@@ -27,3 +29,5 @@ keycloak_admin_password: "changeme"
 # n8n
 n8n_image_tag: "latest"
 n8n_port: 5678
+n8n_admin_email: "admin@example.com"
+n8n_admin_password: "changeme"

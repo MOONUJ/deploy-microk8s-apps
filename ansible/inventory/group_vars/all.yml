@@ -35,9 +35,13 @@ kubeconfig_local_path: "{{ playbook_dir }}/../kubeconfig"
 
 # Docker-Compose 앱 설정
 nexus_port: 8081
+nexus_admin_password: "changeme"
 sonarqube_port: 9000
 sonarqube_db_password: "changeme"
+sonarqube_admin_password: "Admin@gooddi123"
 keycloak_port: 8080
 keycloak_admin_user: "admin"
 keycloak_admin_password: "changeme"
 n8n_port: 5678
+n8n_admin_email: "admin@gooddi.lab"
+n8n_admin_password: "changeme"

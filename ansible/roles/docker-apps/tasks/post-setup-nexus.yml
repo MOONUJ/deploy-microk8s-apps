@@ -1,0 +1,51 @@
+---
+- name: "[Nexus] Wait for Nexus to be ready"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ nexus_port }}/service/rest/v1/status"
+    method: GET
+    status_code: 200
+  register: nexus_health
+  retries: 30
+  delay: 10
+  until: nexus_health.status == 200
+
+- name: "[Nexus] Check if initial admin password file exists"
+  ansible.builtin.stat:
+    path: "{{ docker_apps_base_dir }}/nexus/admin.password"
+  register: nexus_admin_pw_host
+
+- name: "[Nexus] Copy initial password from container"
+  ansible.builtin.command: docker cp nexus:/nexus-data/admin.password {{ docker_apps_base_dir }}/nexus/admin.password
+  when: not nexus_admin_pw_host.stat.exists
+  register: nexus_cp_result
+  failed_when: false
+
+- name: "[Nexus] Read initial admin password"
+  ansible.builtin.slurp:
+    src: "{{ docker_apps_base_dir }}/nexus/admin.password"
+  register: nexus_initial_pw
+  when: nexus_cp_result is not skipped and nexus_cp_result.rc == 0
+
+- name: "[Nexus] Change admin password"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ nexus_port }}/service/rest/v1/security/users/admin/change-password"
+    method: PUT
+    user: admin
+    password: "{{ nexus_initial_pw.content | b64decode }}"
+    force_basic_auth: true
+    headers:
+      Content-Type: "text/plain"
+    body: "{{ nexus_admin_password }}"
+    status_code: [200, 204]
+  when: nexus_initial_pw is not skipped and nexus_initial_pw is defined
+
+- name: "[Nexus] Remove initial password file from container"
+  ansible.builtin.command: docker exec nexus rm -f /nexus-data/admin.password
+  when: nexus_initial_pw is not skipped and nexus_initial_pw is defined
+  changed_when: true
+
+- name: "[Nexus] Remove local initial password file"
+  ansible.builtin.file:
+    path: "{{ docker_apps_base_dir }}/nexus/admin.password"
+    state: absent
+  when: nexus_initial_pw is not skipped and nexus_initial_pw is defined

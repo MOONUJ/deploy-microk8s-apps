@@ -1,0 +1,41 @@
+---
+- name: "[SonarQube] Wait for SonarQube to be ready"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ sonarqube_port }}/api/system/status"
+    method: GET
+    status_code: 200
+    return_content: true
+  register: sonar_health
+  retries: 30
+  delay: 10
+  until: sonar_health.status == 200 and sonar_health.json.status == "UP"
+
+- name: "[SonarQube] Try login with default password (admin/admin)"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ sonarqube_port }}/api/authentication/validate"
+    method: GET
+    user: admin
+    password: admin
+    force_basic_auth: true
+    status_code: 200
+    return_content: true
+  register: sonar_default_login
+  failed_when: false
+
+- name: "[SonarQube] Change admin password from default"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ sonarqube_port }}/api/users/change_password"
+    method: POST
+    user: admin
+    password: admin
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      login: admin
+      previousPassword: admin
+      password: "{{ sonarqube_admin_password }}"
+    status_code: [200, 204]
+  when:
+    - sonar_default_login.status == 200
+    - sonar_default_login.json.valid | default(false)
+    - sonarqube_admin_password != "admin"

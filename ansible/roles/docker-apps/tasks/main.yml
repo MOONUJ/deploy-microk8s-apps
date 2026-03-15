@@ -73,3 +73,13 @@
     label: "{{ item.item.name }}"
   when: item is not skipped
   changed_when: true
+
+# --- Post-setup: Initial account configuration ---
+
+- name: Post-setup Nexus
+  ansible.builtin.include_tasks: post-setup-nexus.yml
+  when: deploy_apps | length == 0 or 'nexus' in deploy_apps
+
+- name: Post-setup SonarQube
+  ansible.builtin.include_tasks: post-setup-sonarqube.yml
+  when: deploy_apps | length == 0 or 'sonarqube' in deploy_apps

@@ -6,6 +6,10 @@ services:
     restart: unless-stopped
     ports:
       - "{{ n8n_port }}:5678"
+    environment:
+      N8N_SECURE_COOKIE: "false"
+      N8N_DEFAULT_USER_EMAIL: "{{ n8n_admin_email }}"
+      N8N_DEFAULT_USER_PASSWORD: "{{ n8n_admin_password }}"
     volumes:
       - n8n-data:/home/node/.n8n
 
