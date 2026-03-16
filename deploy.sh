@@ -74,7 +74,11 @@ ensure_dependencies() {
     echo "    Helm CLI already installed, skipping."
   else
     echo "    Installing Helm CLI..."
-    brew install helm
+    if command -v brew &>/dev/null; then
+      brew install helm
+    else
+      curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    fi
   fi
 }
 

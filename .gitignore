@@ -12,3 +12,7 @@ terraform.tfvars
 
 # Ansible
 hosts.ini
+secrets.yml
+
+# Claude Code
+CLAUDE.md

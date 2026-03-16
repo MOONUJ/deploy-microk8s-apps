@@ -1,0 +1,75 @@
+---
+name: CD - Deploy (Ansible)
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: "배포할 앱 (콤마 구분, 비우면 전체 배포)"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Ansible Deploy
+    runs-on: self-hosted
+    environment: production
+    env:
+      ANSIBLE_CONFIG: ${{ github.workspace }}/ansible/ansible.cfg
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: |
+          if ! command -v sshpass &>/dev/null; then
+            sudo apt-get update && sudo apt-get install -y sshpass
+          fi
+
+      - name: Generate inventory
+        run: |
+          cat > ansible/inventory/hosts.ini << INVENTORY
+          [microk8s]
+          k8s-node-1 ansible_host=${{ secrets.TARGET_HOST }} ansible_user=${{ secrets.VM_USER }}
+          [microk8s:vars]
+          ansible_python_interpreter=/usr/bin/python3
+          ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+          ansible_ssh_pass=${{ secrets.VM_PASSWORD }}
+          ansible_become_pass=${{ secrets.VM_PASSWORD }}
+          INVENTORY
+
+      - name: Override sensitive variables
+        run: |
+          cat > ansible/inventory/group_vars/secrets.yml << SECRETS
+          nexus_admin_password: "${{ secrets.NEXUS_ADMIN_PASSWORD }}"
+          sonarqube_db_password: "${{ secrets.SONARQUBE_DB_PASSWORD }}"
+          sonarqube_admin_password: "${{ secrets.SONARQUBE_ADMIN_PASSWORD }}"
+          keycloak_admin_password: "${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}"
+          n8n_admin_password: "${{ secrets.N8N_ADMIN_PASSWORD }}"
+          SECRETS
+
+      - name: Install dependencies
+        run: |
+          pip install kubernetes ansible-core 2>/dev/null || true
+          cd ansible && ansible-galaxy collection install -r requirements.yml --force
+
+      - name: Run Ansible deploy
+        run: |
+          chmod +x deploy.sh
+          if [ -n "${{ inputs.apps }}" ]; then
+            ./deploy.sh deploy --apps "${{ inputs.apps }}"
+          else
+            ./deploy.sh deploy
+          fi
+
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          rm -f ansible/inventory/hosts.ini
+          rm -f ansible/inventory/group_vars/secrets.yml

@@ -1,3 +1,13 @@
+terraform {
+  required_version = ">= 1.5"
+  required_providers {
+    vsphere = {
+      source  = "hashicorp/vsphere"
+      version = "~> 2.12"
+    }
+  }
+}
+
 provider "vsphere" {
   user                 = var.vsphere_user
   password             = var.vsphere_password

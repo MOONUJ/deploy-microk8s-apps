@@ -1,0 +1,103 @@
+---
+name: CD - Infrastructure (Terraform)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "실행할 작업"
+        required: true
+        type: choice
+        options:
+          - "create-and-deploy"
+          - "create-only"
+          - "destroy"
+      apps:
+        description: "배포할 앱 (콤마 구분, 비우면 전체 배포, create-and-deploy만 해당)"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: infra
+  cancel-in-progress: false
+
+jobs:
+  infra:
+    name: Terraform + Ansible
+    runs-on: self-hosted
+    environment: infrastructure
+    env:
+      ANSIBLE_CONFIG: ${{ github.workspace }}/ansible/ansible.cfg
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        if: inputs.action != 'destroy'
+        run: |
+          if ! command -v sshpass &>/dev/null; then
+            sudo apt-get update && sudo apt-get install -y sshpass
+          fi
+
+      - name: Setup Terraform variables
+        working-directory: vsphere-terraform
+        run: |
+          cat > terraform.tfvars << TFVARS
+          vsphere_user     = "${{ secrets.VSPHERE_USER }}"
+          vsphere_password = "${{ secrets.VSPHERE_PASSWORD }}"
+          vsphere_server   = "${{ secrets.VSPHERE_SERVER }}"
+          vm_user          = "${{ secrets.VM_USER }}"
+          vm_password      = "${{ secrets.VM_PASSWORD }}"
+          ssh_public_key   = "${{ secrets.SSH_PUBLIC_KEY }}"
+          TFVARS
+
+      # --- Terraform Destroy ---
+      - name: Terraform destroy
+        if: inputs.action == 'destroy'
+        run: |
+          chmod +x deploy.sh
+          ./deploy.sh destroy
+
+      # --- Terraform Create (VM 생성만) ---
+      - name: Terraform create VMs
+        if: inputs.action == 'create-only'
+        run: |
+          chmod +x deploy.sh
+          ./deploy.sh infra
+
+      # --- Terraform Create + Ansible Deploy ---
+      - name: Override sensitive variables
+        if: inputs.action == 'create-and-deploy'
+        run: |
+          cat > ansible/inventory/group_vars/secrets.yml << SECRETS
+          nexus_admin_password: "${{ secrets.NEXUS_ADMIN_PASSWORD }}"
+          sonarqube_db_password: "${{ secrets.SONARQUBE_DB_PASSWORD }}"
+          sonarqube_admin_password: "${{ secrets.SONARQUBE_ADMIN_PASSWORD }}"
+          keycloak_admin_password: "${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}"
+          n8n_admin_password: "${{ secrets.N8N_ADMIN_PASSWORD }}"
+          SECRETS
+
+      - name: Install dependencies
+        if: inputs.action == 'create-and-deploy'
+        run: |
+          pip install kubernetes ansible-core 2>/dev/null || true
+          cd ansible && ansible-galaxy collection install -r requirements.yml --force
+
+      - name: Terraform create + Ansible deploy
+        if: inputs.action == 'create-and-deploy'
+        run: |
+          chmod +x deploy.sh
+          if [ -n "${{ inputs.apps }}" ]; then
+            ./deploy.sh deploy --terraform --apps "${{ inputs.apps }}"
+          else
+            ./deploy.sh deploy --terraform
+          fi
+
+      # --- 정리 ---
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          rm -f ansible/inventory/group_vars/secrets.yml
+          rm -f vsphere-terraform/terraform.tfvars
