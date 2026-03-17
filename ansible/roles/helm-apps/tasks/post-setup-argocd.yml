@@ -1,0 +1,54 @@
+---
+- name: "[ArgoCD] Check if initial admin secret exists"
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_local_path }}"
+    kind: Secret
+    name: argocd-initial-admin-secret
+    namespace: "{{ app_namespaces.argocd }}"
+  register: argocd_initial_secret
+
+- name: "[ArgoCD] Skip post-setup if initial secret is already removed"
+  ansible.builtin.debug:
+    msg: "Initial admin secret already removed — password was previously changed. Skipping."
+  when: argocd_initial_secret.resources | length == 0
+
+- name: "[ArgoCD] Post-setup password change"
+  when: argocd_initial_secret.resources | length > 0
+  block:
+    - name: "[ArgoCD] Get initial admin password"
+      ansible.builtin.set_fact:
+        argocd_initial_password: "{{ argocd_initial_secret.resources[0].data.password | b64decode }}"
+
+    - name: "[ArgoCD] Install python3-bcrypt for password hashing"
+      ansible.builtin.pip:
+        name: bcrypt
+        state: present
+
+    - name: "[ArgoCD] Generate bcrypt hash of new password"
+      ansible.builtin.command:
+        cmd: python3 -c "import bcrypt; print(bcrypt.hashpw('{{ argocd_admin_password }}'.encode(), bcrypt.gensalt(rounds=10)).decode())"
+      register: argocd_bcrypt_hash
+      changed_when: false
+      no_log: true
+
+    - name: "[ArgoCD] Patch argocd-secret with new password"
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_local_path }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: argocd-secret
+            namespace: "{{ app_namespaces.argocd }}"
+          stringData:
+            admin.password: "{{ argocd_bcrypt_hash.stdout }}"
+            admin.passwordMtime: "{{ now(utc=true).isoformat() }}"
+
+    - name: "[ArgoCD] Delete initial admin secret (marks setup as done)"
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_local_path }}"
+        kind: Secret
+        name: argocd-initial-admin-secret
+        namespace: "{{ app_namespaces.argocd }}"
+        state: absent

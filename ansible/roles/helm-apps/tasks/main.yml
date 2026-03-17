@@ -199,3 +199,9 @@
   loop_control:
     label: "{{ item.name }}"
   when: deploy_apps | length == 0 or item.name in deploy_apps
+
+# --- Post-setup: ArgoCD initial password change ---
+
+- name: Post-setup ArgoCD
+  ansible.builtin.include_tasks: post-setup-argocd.yml
+  when: deploy_apps | length == 0 or 'argocd' in deploy_apps

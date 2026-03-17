@@ -25,6 +25,7 @@ nfs_storage_class_name: "nfs-csi"
 # ArgoCD 설정
 argocd_server_service_type: "ClusterIP"
 argocd_server_insecure: true
+argocd_admin_password: "changeme"
 
 # MetalLB 설정
 enable_metallb: false

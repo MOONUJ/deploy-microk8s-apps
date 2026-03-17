@@ -29,6 +29,7 @@ metallb_ip_range: "10.100.64.174-10.100.64.179"
 ingress_domain: "gooddi.lab"
 enable_ingress: true
 argocd_ingress_host: "argocd.{{ ingress_domain }}"
+argocd_admin_password: "changeme"
 
 # kubeconfig 경로
 kubeconfig_local_path: "{{ playbook_dir }}/../kubeconfig"
